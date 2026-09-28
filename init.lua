@@ -4,14 +4,17 @@ vim.o.signcolumn = "yes"
 vim.o.winborder = "single"
 vim.o.wrap = false
 vim.o.tabstop = 4
+vim.o.shiftwidth = 4
+vim.o.softtabstop = 4
 vim.o.swapfile = false
 vim.o.completeopt = "menu,menuone,noinsert,noselect"
+vim.o.updatetime = 250
 vim.g.mapleader = " "
 vim.keymap.set('n', '<leader>o', ':update<CR> :source<CR>')
 vim.keymap.set('n', '<leader>w', ':write<CR>')
 vim.keymap.set('n', '<leader>q', ':quit<CR>')
 vim.keymap.set('n', '<leader>lf', vim.lsp.buf.format)
-
+vim.keymap.set('n', '<Esc>', '<cmd>noh<CR>', { silent = true })
 vim.g.closetag_filenames = '*.html,*.xhtml'
 vim.pack.add({
 		{src="https://github.com/nvim-lua/plenary.nvim"},
@@ -20,7 +23,9 @@ vim.pack.add({
 		{src="https://github.com/chomosuke/typst-preview.nvim"},
 		{src="https://github.com/alvan/vim-closetag"},
 		{src="https://github.com/uga-rosa/ccc.nvim"},
+		{src="https://github.com/windwp/nvim-autopairs"}
 })
+require("nvim-autopairs").setup({})
 require("ccc").setup({
 	highlighter = { auto_enable = true, lsp = true },
 })
@@ -36,12 +41,17 @@ vim.api.nvim_create_autocmd('LspAttach', {
         end
     end,
 })
+vim.api.nvim_create_autocmd('CursorHold', {
+    callback = function()
+        vim.diagnostic.open_float(nil, { focusable = false })
+    end,
+})
 vim.keymap.set('i', '<Tab>', function()
   if vim.fn.pumvisible() == 1 then
     if vim.fn.complete_info().selected == -1 then
-      return '<C-n><C-y>'  -- select first item, then confirm
+      return '<C-n><C-y>' 
     else
-      return '<C-y>'       -- confirm whatever's highlighted
+      return '<C-y>'       
     end
   else
     return '<Tab>'
@@ -58,3 +68,26 @@ vim.keymap.set('n', '<leader>b', builtin.buffers, {desc = 'Telescope buffers'})
 
 vim.keymap.set('n', '<leader>cd', ":Ex<CR>")
 vim.lsp.enable({"lua_ls", "tinymist", "clangd", "emmet_language_server" })
+local runners = {
+	cpp  = "c++ -std=c++23 -Wall -Wextra -g {file} -o {out} && {out}",
+	c    = "cc -std=c17 -Wall -Wextra -g {file} -o {out} && {out}",
+	rust = "rustc {file} -o {out} && {out}",
+	java   = "java {file}",
+	python = "python3 {file}",
+	julia  = "julia {file}",
+	lua    = "lua {file}",
+	sh     = "sh {file}",
+}
+
+vim.keymap.set("n", "<leader>r", function()
+  local cmd = runners[vim.bo.filetype]
+  if not cmd then
+    vim.notify("No runner for " .. vim.bo.filetype, vim.log.levels.WARN)
+    return
+  end
+
+  vim.cmd("write")
+  cmd = cmd:gsub("{file}", vim.fn.shellescape(vim.fn.expand("%:p")))
+         :gsub("{out}",  vim.fn.shellescape(vim.fn.expand("%:p:r")))
+   vim.cmd("botright 15split | terminal " .. cmd)
+end, { desc = "Run current file" })
