@@ -79,6 +79,21 @@ local runners = {
 	sh     = "sh {file}",
 }
 
+-- vim.keymap.set("n", "<leader>r", function()
+--   local cmd = runners[vim.bo.filetype]
+--   if not cmd then
+--     vim.notify("No runner for " .. vim.bo.filetype, vim.log.levels.WARN)
+--     return
+--   end
+--
+--   vim.cmd("write")
+--   cmd = cmd:gsub("{file}", vim.fn.shellescape(vim.fn.expand("%:p")))
+--          :gsub("{out}",  vim.fn.shellescape(vim.fn.expand("%:p:r")))
+--    vim.cmd("botright 15split | terminal " .. cmd)
+-- end, { desc = "Run current file" })
+
+local run = { win = nil, buf = nil }
+
 vim.keymap.set("n", "<leader>r", function()
   local cmd = runners[vim.bo.filetype]
   if not cmd then
@@ -87,7 +102,35 @@ vim.keymap.set("n", "<leader>r", function()
   end
 
   vim.cmd("write")
-  cmd = cmd:gsub("{file}", vim.fn.shellescape(vim.fn.expand("%:p")))
-         :gsub("{out}",  vim.fn.shellescape(vim.fn.expand("%:p:r")))
-   vim.cmd("botright 15split | terminal " .. cmd)
+  local file = vim.fn.shellescape(vim.fn.expand("%:p"))
+  local out  = vim.fn.shellescape(vim.fn.expand("%:p:r"))
+  cmd = cmd:gsub("{file}", function() return file end)
+           :gsub("{out}",  function() return out end)
+    local root = vim.fs.root(0, "Makefile")
+  if root then
+    cmd = "cd " .. vim.fn.shellescape(root) .. " && make run"
+  end
+
+  local src_win = vim.api.nvim_get_current_win()
+
+  -- reuse the output window if it's still open, otherwise create it
+  if run.win and vim.api.nvim_win_is_valid(run.win) then
+    vim.api.nvim_set_current_win(run.win)
+  else
+    vim.cmd("botright 15split")
+    run.win = vim.api.nvim_get_current_win()
+  end
+
+  -- a terminal buffer runs one job, so swap in a fresh one and drop the old
+  local old = run.buf
+  run.buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(run.win, run.buf)
+  if old and vim.api.nvim_buf_is_valid(old) then
+    vim.api.nvim_buf_delete(old, { force = true })  -- also kills a still-running job
+  end
+
+  vim.fn.jobstart(cmd, { term = true })
+  vim.cmd("normal! G")  -- cursor on last line so the pane follows output
+
+  vim.api.nvim_set_current_win(src_win)
 end, { desc = "Run current file" })
